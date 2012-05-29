@@ -1,0 +1,347 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>frenky Dashboard</title>
+
+		<script type="text/javascript" src="/css/frenko/fr_jquery.min.js"></script>
+		<script src="/css/frenko/js/highcharts.js"></script>
+		<script src="/css/frenko/js/modules/exporting.js"></script>
+		<script type="text/javascript">
+
+var chart;		
+		
+		
+$(function () {
+
+function luppp(accur,log) {
+var mas=[];
+
+add='';
+if (log){add='&log=1'}
+
+$.ajax({
+	url: "/fcgi-bin/frenky.fpl?init=1&accur="+accur+add+"&r=" + (Math.floor(Math.random() * 100000)),
+	dataType: 'json',
+	async: false,
+	success: function (data) {
+		if (data.status){
+			var refo=data.init;
+			var dama=[];
+			for (i=0;i<refo.length;i++){
+
+				var toparse=refo[i][1];
+				var cords=[];
+				for (j=0;j<toparse.length;j++){
+					cords.push({x:toparse[j][0]*1000,y:toparse[j][1]});
+				}
+				dama.push({
+					name:refo[i][0]+'<br/>'+refo[i][2],
+					data:cords
+				});
+			}
+			mas=dama;
+		}
+	}
+});
+
+return mas;	
+}
+
+/*
+$('#button').click(function() {
+
+
+
+if (chart.yAxis[0].options["type"] == 'logarithmic'){
+chart.yAxis[0].options["min"]=0;
+chart.yAxis[0].options["type"] = 'linear';
+chart.yAxis[0].options["minorTickInterval"]=undefined;
+$(this).html('logarithmic');
+}
+else {
+chart.yAxis[0].options["min"]=0;
+chart.yAxis[0].options["type"] = 'logarithmic';
+chart.yAxis[0].options["minorTickInterval"]='auto';
+$(this).html('linear');
+}
+
+
+
+});
+*/
+
+function highlight(series, index, hide) {
+    $(series).each(function (i, serie) {
+        if(i != index) {
+            serie.graph.attr("stroke", (hide ? '#F2F2F2' : serie.color));
+            $.each(serie.data, function (k, data) {
+                if (data.graphic)
+                    data.graphic.attr("fill", (hide ? '#F2F2F2' : serie.color));
+            });
+        } else {
+            serie.group.toFront();    
+        }
+    });
+}
+
+
+function requestData(accur,log, chart) {
+add='';
+if (log){add='&log=1'}
+	$.getJSON("/fcgi-bin/frenky.fpl?refresh=1&accur="+accur+add+"&r=" + (Math.floor(Math.random() * 100000)),
+      function(data){
+			if (data.status){
+				var refo=data.refresh;
+				for (i=0;i<refo.length;i++){
+					if (i==0){fl=true}
+					else {fl=false}
+					refo[i][0]=refo[i][0]*1000;
+					refo[i][1]=refo[i][1];
+					chart.series[i].addPoint([refo[i][0],refo[i][1]], true, true);
+				}
+			}
+	});
+	
+	times=3000;
+	if (accur==300){times=330000}
+	else if(accur==1200){times=1260000}
+	setTimeout(function () { requestData(accur,log,chart)}, times);		
+}
+
+
+
+    $(document).ready(function() {
+        Highcharts.setOptions({
+            global: {
+                useUTC: false
+            }
+        });
+		
+		
+       
+	var options={
+		chart: {
+			renderTo: 'container',
+			type: 'spline',
+			marginRight: 10,
+			animation: false,
+			height: 500,
+			zoomType: 'xy',
+			events: {
+			   load: function () {
+				requestData(2, this)
+			   }
+			}
+		},
+		title: {
+			text: '3 sec refresh'
+		},
+		credits: {
+		enabled: false
+		},
+		xAxis: {
+			type: 'datetime',
+			tickPixelInterval: 150,
+			
+		},
+		yAxis: {
+			title: {
+				text: ''
+			},
+			min: 0,
+			showLastLabel: true,
+			plotLines: [{
+				value: 0,
+				width: 1,
+				color: '#808080'
+			}]
+		},
+
+		plotOptions: {
+			series: {
+				//shadow: false,
+				lineWidth:1,
+				//stickyTracking: false
+				
+			},
+			spline: { 
+				marker: {radius: 3,
+				}
+			}
+		},
+		animation:false,
+		tooltip: {
+			formatter: function() {
+					val=this.series.name;
+					val=val.substring(0,120);
+					//val=val.replace(/<.+/g, '');
+					return '<b>'+ val +'</b><br/>'+
+					Highcharts.numberFormat(this.y, 0)+'<br/>'+
+					Highcharts.dateFormat('%H:%M:%S', this.x);
+					
+			},
+			crosshairs: [{
+				dashStyle: 'shortdot'
+			}, {
+				dashStyle: 'shortdot'
+			}],
+			
+			shadow: false
+			
+		},
+		legend: {
+			enabled: true,
+			 itemHoverStyle: {
+				fontWeight: 'bold'
+			},
+			
+			itemStyle: {
+				fontWeight: 'normal',
+				
+			},
+			backgroundColor: '#FFFFFF',
+			borderWidth: 0,
+			fontWeight: 'normal',
+			
+			
+			
+			labelFormatter: function() {
+				//return this.name;
+				
+				//this.name=this.name.substring(0,12);
+				var words = this.name.split(/[\s]+/);
+            var numWordsPerLine = 4;
+            var str = [];
+
+            for (var word in words) {
+                if (word > 0 && word % numWordsPerLine == 0)
+                    str.push('<br>');
+
+                 str.push(words[word]);
+            }
+
+            return str.join(' ');
+			}  
+		},
+		exporting: {
+			enabled: true
+		},
+		series: luppp(2)
+		
+	}	
+
+//	  for(var key in options.yAxis){alert(key);}
+	
+function initg(ind,options,log){
+
+	options.chart.renderTo='container'+ind;
+	options.chart.events.load=function () {
+		requestData(ind, log, this)
+	   }
+	options.series=luppp(ind,log);
+
+	if (ind==300){options.title.text='5 min refresh (last 2 hours)'}
+	if (ind==1200){options.title.text='20 min refresh (last 24 hours)'}
+	
+	xo = new Highcharts.Chart(options,function(chart){
+			$(chart.series).each(function(i, serie){
+				$(serie.legendItem.element).hover(function(){
+					highlight(chart.series, serie.index, true);
+				}, function(){
+					highlight(chart.series, serie.index, false);
+				})
+			});
+			
+			
+			$('#showAll'+ind).unbind('click').click(function(){
+				for(j=0; j < chart.series.length; j++) {
+					chart.series[j].show();
+				}
+			});
+			
+			$('#hideAll'+ind).unbind('click').click(function(){
+				for(j=0; j < chart.series.length; j++) {
+					chart.series[j].hide();
+				}
+			});
+			
+			$('#button'+ind+'log').unbind('click').click(function(){
+				
+					options.yAxis.type='logarithmic';
+					options.yAxis.min=null;
+					options.yAxis.minorTickInterval='auto';
+					chart[ind]=initg(ind,options,1);
+				
+			});			
+			$('#button'+ind+'lin').unbind('click').click(function(){
+					options.yAxis.type='line';
+					options.yAxis.min=0;
+					options.yAxis.minorTickInterval=null;
+					chart[ind]=initg(ind,options,0);
+					
+			});			
+			
+			/*$.each(chart.series, function(i, serie){
+				serie.legendItem.on('mouseover', function(){
+					//$('#legend-tooltip').text(serie.name);
+					
+					alert(serie.legendItem["textStr"]+' '+serie.name);
+					x='';
+					for(var key in serie.legendItem){x=x+' '+key+'='+serie.legendItem[key]}
+					alert (x);
+					
+					
+					
+				});
+			});
+			*/
+			
+    });
+	
+return xo;
+}	
+	
+	var a = [2,300,1200];
+	var chart = {};
+	for (var i=0; i<a.length; i++) {
+			chart[a[i]] =initg(a[i],options,0);
+	}
+
+
+
+	
+    });
+    
+});
+</script>
+	</head>
+	<body>
+		<div id="container2" style="min-width: 400px;margin: 0 auto;position:relative;"></div>
+		
+		<div style="text-align:center;">
+		 	<button id="showAll2"style="width:120px;">show all</button>
+			<button id="hideAll2"style="width:120px;">hide all</button>
+			<button id="button2log">logarithmic</button>
+			<button id="button2lin">linear</button>
+		</div>
+		<hr>
+		
+		<div id="container300" style="min-width: 400px;margin: 0 auto"></div>
+		<div style="text-align:center;">
+		 	<button id="showAll300"style="width:120px;">show all</button>
+			<button id="hideAll300"style="width:120px;">hide all</button>
+			<button id="button300log">logarithmic</button>
+			<button id="button300lin">linear</button>
+		</div>
+		<hr>
+		
+		<div id="container1200" style="min-width: 400px;margin: 0 auto"></div>
+		<div style="text-align:center;">
+		 	<button id="showAll1200"style="width:120px;">show all</button>
+			<button id="hideAll1200"style="width:120px;">hide all</button>
+			<button id="button1200log">logarithmic</button>
+			<button id="button1200lin">linear</button>
+		</div>
+	</body>
+</html>

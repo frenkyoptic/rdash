@@ -1,0 +1,2 @@
+errdescr=	2	[E2;Javascript error at web interface of files.mail.ru - nginx acclog]	1
+errorcode=\d+	3	[E3;Fail upload with errorcode - nginx acclog]	1

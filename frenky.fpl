@@ -1,0 +1,137 @@
+#!/usr/bin/perl -w
+use strict;
+use warnings;
+
+use CGI::Fast qw(param header);
+use Cache::Memcached::Fast;
+#use DBI;
+
+my $CONFIG='./frenko_config';
+
+  my $memd = new Cache::Memcached::Fast({
+      servers => [ 
+	  { address => 'localhost:11211', weight => 2.5 }],
+	 #  { address => '/path/to/unix.sock', noreply => 1 } ],
+   #   namespace => 'my:',
+      connect_timeout => 0.2,
+      io_timeout => 0.5,
+      close_on_error => 1,
+     
+      max_failures => 3,
+      failure_timeout => 2,
+      ketama_points => 150,
+      nowait => 1,
+    #  serialize_methods => [ \&Storable::freeze, \&Storable::thaw ],
+      utf8 => ($^V >= 5.008001 ? 1 : 0),
+  });
+
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+sub load_config{
+	my $re=shift;
+	%{$re}=();
+	open (F,$CONFIG) || die 'cant open config '.$CONFIG;
+	while (<F>){
+		next if /^[\s\n]+$/;
+		my (undef,$key,$desc)=split("\t",$_,4);
+			$desc=~s/[\]\[]//g;
+			my ($short,$long)=split(';',$desc,2);
+		
+		$$re{$key}{short}=$short;
+		$$re{$key}{long}=$long;
+	}
+	close (F);
+	
+}
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+sub startpoint{
+	my $accur=shift;
+	my $t=time();
+	my $x=$t % $accur;
+	my $memc=$t-$x;
+	$memc-=$accur;
+	return $memc;
+}
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+my %Regexps=();
+load_config(\%Regexps);
+
+
+while (new CGI::Fast) {
+
+print header(-charset=>'UTF-8');
+	
+	if (defined param('flush'))	{
+		$memd->flush_all; 
+		print '{"status":"1"}';
+	
+	}
+	elsif (defined param('loadconfig'))	{
+		load_config(\%Regexps);
+		print '{"status":"1"}';
+	
+	}
+	elsif (defined param('init')){
+		
+		my $accur=param('accur') || 2;
+		my $start=startpoint($accur);
+		
+		my @data=();
+		my @times=();
+		my @valo=();	
+		
+		my $history=60;
+		if ($accur==300){$history=24}
+		elsif ($accur==1200){$history=72}
+		
+		for (my $i=$start-$history*$accur;$i<$start;$i+=$accur){
+			push @times,$i;	
+		}
+		
+		foreach (keys %Regexps){
+			foreach my $i(@times){
+				push @valo, $_.'_'.$accur.'_'.$i;
+			}
+		}
+		
+		my $href=$memd->get_multi(@valo) || warn "mem fails miltis get ".scalar(@valo)."\n";	
+			
+		foreach (sort {$a <=> $b} keys %Regexps) {
+			my @cords=();
+			foreach my $t(@times){
+				my $key=$_.'_'.$accur.'_'.$t;
+				$$href{$key}=0 if ! exists $$href{$key};
+				$$href{$key}=0.2 if $$href{$key}==0 and defined param('log');
+				push @cords,'['.$t.','.$$href{$key}.']';
+				
+			}
+			push @data, '["'.$Regexps{$_}{short}.'",['.join(',',@cords).'],"'.$Regexps{$_}{long}.'"]' 
+		}	
+	
+		print '{"status":"1","init":['.join(',',@data).']}';
+	
+	}
+	elsif (defined param('refresh')){
+		my $accur=param('accur') || 2;
+		my $start=startpoint($accur);
+		
+		my @valo=();
+		push @valo, $_.'_'.$accur.'_'.$start foreach keys %Regexps;
+		my $href=$memd->get_multi(@valo) || warn "mem fails milti".scalar(@valo)."\n";	
+		
+		
+		@valo=();
+		foreach (sort {$a <=> $b} keys %Regexps){
+			my $key=$_.'_'.$accur.'_'.$start;
+			my $val=(exists $$href{$key})? $$href{$key} : 0;
+			$val=0.2 if $val==0 and defined param('log');
+			push @valo, '['.$start.','.$val.']';
+		}
+		print '{"status":"1","refresh":['.join(',',@valo).']}';
+	
+	}
+	
+}
+
+#$dbh->disconnect;	
